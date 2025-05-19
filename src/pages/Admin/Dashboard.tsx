@@ -1,22 +1,37 @@
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/auth-context";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import MenuItemsManager from "@/components/admin/MenuItemsManager";
+import CategoriesManager from "@/components/admin/CategoriesManager";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function AdminDashboard() {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   
   useEffect(() => {
     if (!isAuthenticated) {
       navigate("/admin");
     }
     document.title = "Panel de Administración | Río Segundo";
+    setLoading(false);
   }, [isAuthenticated, navigate]);
 
   if (!isAuthenticated) {
     return null;
+  }
+
+  if (loading) {
+    return (
+      <div className="bg-secondary min-h-screen flex items-center justify-center">
+        <p>Cargando...</p>
+      </div>
+    );
   }
 
   return (
@@ -47,13 +62,18 @@ export default function AdminDashboard() {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Panel de Administración</h1>
         
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <p className="text-center text-muted-foreground">
-            Esta sección requiere integración con Supabase para su funcionalidad completa.
-            <br />
-            Aquí podrás gestionar tus productos, categorías y pedidos.
-          </p>
-        </div>
+        <Tabs defaultValue="menu-items" className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="menu-items">Productos</TabsTrigger>
+            <TabsTrigger value="categories">Categorías</TabsTrigger>
+          </TabsList>
+          <TabsContent value="menu-items" className="mt-4">
+            <MenuItemsManager />
+          </TabsContent>
+          <TabsContent value="categories" className="mt-4">
+            <CategoriesManager />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
