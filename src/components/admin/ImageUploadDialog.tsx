@@ -5,9 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { v4 as uuidv4 } from "uuid";
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2, Upload, ImageIcon, X, Loader2 } from "lucide-react";
+import { Upload, Image as ImageIcon, X, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 interface MenuItem {
   id: string;
@@ -27,6 +28,7 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [previewImages, setPreviewImages] = useState<string[]>(menuItem.image_urls || []);
+  const [error, setError] = useState<string | null>(null);
   
   // Asegurar que previewImages se actualice cuando menuItem.image_urls cambia
   useEffect(() => {
@@ -58,9 +60,20 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
 
     setIsUploading(true);
     setUploadProgress(10);
+    setError(null);
     
     try {
       const file = files[0];
+      // Validar tamaño del archivo (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error("El archivo es demasiado grande. El tamaño máximo es 5MB.");
+      }
+      
+      // Validar tipo de archivo
+      if (!file.type.startsWith("image/")) {
+        throw new Error("Solo se permiten archivos de imagen.");
+      }
+      
       const fileExt = file.name.split('.').pop();
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `${fileName}`;
@@ -71,6 +84,8 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       }, 200);
 
       console.log("Iniciando carga de archivo al bucket menu-images:", filePath);
+      
+      // Upload file with public option set to true
       const { error: uploadError, data } = await supabase.storage
         .from("menu-images")
         .upload(filePath, file, {
@@ -104,12 +119,15 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       setUploadProgress(100);
       
       toast.success("Imagen subida correctamente");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading file:", error);
-      toast.error("Error al subir la imagen");
+      setError(error.message || "Error al subir la imagen");
+      toast.error(error.message || "Error al subir la imagen");
     } finally {
       setIsUploading(false);
-      setUploadProgress(0);
+      setTimeout(() => {
+        setUploadProgress(0);
+      }, 1000);
       
       // Clear the file input
       if (fileInputRef.current) {
@@ -154,6 +172,9 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Imágenes de {menuItem.name}</DialogTitle>
+          <DialogDescription>
+            Sube o elimina imágenes para este producto. Las imágenes se mostrarán en la web.
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
@@ -174,12 +195,7 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
                     <Loader2 className="h-4 w-4 animate-spin" />
                     <p>Subiendo imagen... {uploadProgress}%</p>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div 
-                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
-                      style={{ width: `${uploadProgress}%` }}
-                    ></div>
-                  </div>
+                  <Progress value={uploadProgress} className="h-2" />
                 </div>
               ) : (
                 <>
@@ -193,6 +209,9 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
                   <p className="text-sm text-muted-foreground">
                     PNG, JPG o GIF. Max 5MB.
                   </p>
+                  {error && (
+                    <p className="text-sm text-destructive mt-2">{error}</p>
+                  )}
                 </>
               )}
             </div>
