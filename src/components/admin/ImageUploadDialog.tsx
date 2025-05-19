@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Trash2, Upload, ImageIcon, X } from "lucide-react";
+import { Trash2, Upload, ImageIcon, X, Loader2 } from "lucide-react";
 
 interface MenuItem {
   id: string;
@@ -26,6 +26,12 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewImages, setPreviewImages] = useState<string[]>(menuItem.image_urls || []);
+  
+  // Asegurar que previewImages se actualice cuando menuItem.image_urls cambia
+  useEffect(() => {
+    setPreviewImages(menuItem.image_urls || []);
+  }, [menuItem.image_urls]);
 
   const updateImageUrlsMutation = useMutation({
     mutationFn: async (imageUrls: string[]) => {
@@ -51,7 +57,7 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(10);
     
     try {
       const file = files[0];
@@ -59,6 +65,12 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `${fileName}`;
 
+      // Simular progreso de carga
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => Math.min(prev + 10, 90));
+      }, 200);
+
+      console.log("Iniciando carga de archivo al bucket menu-images:", filePath);
       const { error: uploadError, data } = await supabase.storage
         .from("menu-images")
         .upload(filePath, file, {
@@ -66,9 +78,14 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
           upsert: false,
         });
 
+      clearInterval(progressInterval);
+
       if (uploadError) {
+        console.error("Error en la carga:", uploadError);
         throw uploadError;
       }
+
+      console.log("Archivo cargado con éxito:", data);
 
       // Get the public URL
       const { data: publicUrlData } = supabase.storage
@@ -76,10 +93,15 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
         .getPublicUrl(filePath);
 
       const publicUrl = publicUrlData.publicUrl;
+      console.log("URL pública generada:", publicUrl);
 
       // Update the menu item with the new image URL
-      const updatedImageUrls = [...(menuItem.image_urls || []), publicUrl];
+      const updatedImageUrls = [...(previewImages || []), publicUrl];
       await updateImageUrlsMutation.mutateAsync(updatedImageUrls);
+      
+      // Actualizar la vista previa
+      setPreviewImages(updatedImageUrls);
+      setUploadProgress(100);
       
       toast.success("Imagen subida correctamente");
     } catch (error) {
@@ -101,6 +123,8 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       // Extract the file name from the URL
       const fileName = imageUrl.split("/").pop() || "";
       
+      console.log("Intentando eliminar archivo:", fileName);
+      
       // Delete from storage
       const { error: deleteError } = await supabase.storage
         .from("menu-images")
@@ -112,8 +136,11 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
       }
 
       // Update the menu item to remove the image URL
-      const updatedImageUrls = menuItem.image_urls.filter(url => url !== imageUrl);
+      const updatedImageUrls = previewImages.filter(url => url !== imageUrl);
       await updateImageUrlsMutation.mutateAsync(updatedImageUrls);
+      
+      // Actualizar la vista previa
+      setPreviewImages(updatedImageUrls);
       
       toast.success("Imagen eliminada correctamente");
     } catch (error) {
@@ -143,10 +170,13 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
               
               {isUploading ? (
                 <div className="space-y-2">
-                  <p>Subiendo imagen...</p>
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <p>Subiendo imagen... {uploadProgress}%</p>
+                  </div>
                   <div className="w-full bg-gray-200 rounded-full h-2.5">
                     <div 
-                      className="bg-blue-600 h-2.5 rounded-full" 
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-300" 
                       style={{ width: `${uploadProgress}%` }}
                     ></div>
                   </div>
@@ -171,16 +201,21 @@ export default function ImageUploadDialog({ isOpen, onClose, menuItem }: ImageUp
           <div className="border rounded-lg p-4">
             <h3 className="text-sm font-medium mb-2">Imágenes actuales</h3>
             
-            {menuItem.image_urls && menuItem.image_urls.length > 0 ? (
+            {previewImages && previewImages.length > 0 ? (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {menuItem.image_urls.map((url, index) => (
+                {previewImages.map((url, index) => (
                   <div key={index} className="relative group">
                     <img 
                       src={url} 
                       alt={`${menuItem.name} ${index + 1}`}
                       className="w-full h-32 object-cover rounded-md"
+                      onError={(e) => {
+                        console.error("Error loading image:", url);
+                        (e.target as HTMLImageElement).src = "https://via.placeholder.com/150?text=Error+de+carga";
+                      }}
                     />
                     <button
+                      type="button"
                       className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => handleDeleteImage(url)}
                     >
