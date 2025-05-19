@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -80,6 +79,9 @@ export default function MenuItemDialog({ isOpen, onClose, menuItem }: MenuItemDi
     mutationFn: async (values: FormValues) => {
       setIsSaving(true);
       
+      // Convert the "null" string to actual null for the category_id
+      const categoryId = values.category_id === "null" ? null : values.category_id;
+      
       if (isEditing && menuItem) {
         // Update existing menu item
         const { data, error } = await supabase
@@ -88,7 +90,7 @@ export default function MenuItemDialog({ isOpen, onClose, menuItem }: MenuItemDi
             name: values.name,
             description: values.description || null,
             price: values.price,
-            category_id: values.category_id || null,
+            category_id: categoryId,
             is_active: values.is_active,
           })
           .eq("id", menuItem.id)
@@ -104,7 +106,7 @@ export default function MenuItemDialog({ isOpen, onClose, menuItem }: MenuItemDi
             name: values.name,
             description: values.description || null,
             price: values.price,
-            category_id: values.category_id || null,
+            category_id: categoryId,
             is_active: values.is_active,
             image_urls: [],
           })
@@ -191,7 +193,7 @@ export default function MenuItemDialog({ isOpen, onClose, menuItem }: MenuItemDi
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="">Sin categoría</SelectItem>
+                      <SelectItem value="null">Sin categoría</SelectItem>
                       {categories?.map((category) => (
                         <SelectItem key={category.id} value={category.id}>
                           {category.name}
